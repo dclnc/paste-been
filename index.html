@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paste Been</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='3' y='2' width='10' height='12' rx='2' fill='%23222'/></svg>">
+<style>
+  :root {
+    --bg: #f6f6f4;
+    --card: #fff;
+    --text: #1c1c1c;
+    --muted: #8a8a86;
+    --line: #e4e4e0;
+    --focus: #1c1c1c;
+    --ok: #1f8a4c;
+    --danger: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141414;
+      --card: #1d1d1d;
+      --text: #ececea;
+      --muted: #8d8d89;
+      --line: #2e2e2c;
+      --focus: #ececea;
+      --ok: #4cc27f;
+      --danger: #e0685b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 40px 16px 80px;
+  }
+  .box {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    margin-bottom: 14px;
+    transition: border-color .15s;
+  }
+  .box.editing { border-color: var(--focus); }
+  textarea {
+    display: block;
+    width: 100%;
+    min-height: 3em;
+    padding: 14px 16px 4px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    resize: none;
+    overflow: hidden;
+    outline: none;
+  }
+  textarea[readonly] { cursor: default; }
+  textarea::placeholder { color: var(--muted); }
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px 8px;
+  }
+  .bar .spacer { flex: 1; }
+  button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button:hover { color: var(--text); background: var(--bg); }
+  button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  button svg { width: 15px; height: 15px; flex: none; }
+  .del { display: none; }
+  .box.editing .del { display: inline-flex; }
+  .del:hover { color: var(--danger); }
+  .copy { color: var(--text); }
+  .copy.done { color: var(--ok); }
+  #add {
+    width: 100%;
+    height: 48px;
+    justify-content: center;
+    border: 1px dashed var(--line);
+    border-radius: 10px;
+    font-size: 22px;
+    font-weight: 300;
+  }
+  #add:hover { border-color: var(--muted); background: transparent; }
+</style>
+</head>
+<body>
+<main>
+  <div id="list"></div>
+  <button id="add" aria-label="Add box">+</button>
+</main>
+
+<template id="tpl">
+  <div class="box">
+    <textarea spellcheck="true" placeholder="Type or paste a template…"></textarea>
+    <div class="bar">
+      <button class="lock"></button>
+      <button class="del" title="Delete box">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg>
+        Delete
+      </button>
+      <span class="spacer"></span>
+      <button class="copy"></button>
+    </div>
+  </div>
+</template>
+
+<script>
+(() => {
+  const KEY = 'paste-been:v1';
+  const list = document.getElementById('list');
+  const tpl = document.getElementById('tpl');
+
+  const ICON = {
+    locked: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>',
+    editing: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 4.9-.7"/></svg>',
+    copy: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 3.5v-.5a1 1 0 0 0-1-1H4a1.5 1.5 0 0 0-1.5 1.5V9a1 1 0 0 0 1 1h.5"/></svg>',
+    check: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 4.5"/></svg>'
+  };
+
+  const load = () => {
+    try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; }
+  };
+  const save = () => {
+    const data = [...list.children].map(b => b.querySelector('textarea').value);
+    try { localStorage.setItem(KEY, JSON.stringify(data)); } catch {}
+  };
+
+  const fit = ta => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+
+  const setEditing = (box, on) => {
+    const ta = box.querySelector('textarea');
+    const lock = box.querySelector('.lock');
+    box.classList.toggle('editing', on);
+    ta.readOnly = !on;
+    lock.innerHTML = (on ? ICON.editing + 'Done' : ICON.locked + 'Edit');
+    lock.title = on ? 'Lock this box' : 'Unlock to edit';
+    if (on) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+  };
+
+  const copyText = async text => {
+    try { await navigator.clipboard.writeText(text); return true; }
+    catch {
+      // Fallback for browsers without the async clipboard API
+      const t = document.createElement('textarea');
+      t.value = text; t.style.position = 'fixed'; t.style.opacity = '0';
+      document.body.appendChild(t); t.select();
+      const ok = document.execCommand('copy');
+      t.remove(); return ok;
+    }
+  };
+
+  const make = (text = '', editing = false) => {
+    const box = tpl.content.firstElementChild.cloneNode(true);
+    const ta = box.querySelector('textarea');
+    const copy = box.querySelector('.copy');
+    ta.value = text;
+    copy.innerHTML = ICON.copy + 'Copy';
+
+    ta.addEventListener('input', () => { fit(ta); save(); });
+    box.querySelector('.lock').addEventListener('click', () =>
+      setEditing(box, !box.classList.contains('editing')));
+    box.querySelector('.del').addEventListener('click', () => {
+      if (ta.value.trim() && !confirm('Delete this box?')) return;
+      box.remove(); save();
+    });
+
+    let timer;
+    copy.addEventListener('click', async () => {
+      const ok = await copyText(ta.value.replace(/\r\n?/g, '\n'));
+      clearTimeout(timer);
+      copy.classList.toggle('done', ok);
+      copy.innerHTML = ok ? ICON.check + 'Copied' : ICON.copy + 'Failed';
+      timer = setTimeout(() => {
+        copy.classList.remove('done');
+        copy.innerHTML = ICON.copy + 'Copy';
+      }, 1400);
+    });
+
+    list.appendChild(box);
+    setEditing(box, editing);
+    fit(ta);
+    return box;
+  };
+
+  const saved = load();
+  saved.forEach(t => make(t, false));
+  if (!saved.length) make('', true);
+
+  document.getElementById('add').addEventListener('click', () => { make('', true); save(); });
+  window.addEventListener('resize', () => list.querySelectorAll('textarea').forEach(fit));
+})();
+</script>
+</body>
+</html>
