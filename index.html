@@ -102,12 +102,24 @@
     font-weight: 300;
   }
   #add:hover { border-color: var(--muted); background: transparent; }
+  .io {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    margin-top: 24px;
+  }
+  .io button { font-size: 12px; height: 26px; }
 </style>
 </head>
 <body>
 <main>
   <div id="list"></div>
   <button id="add" aria-label="Add box">+</button>
+  <div class="io">
+    <button id="export" title="Download all templates as a file">Export</button>
+    <button id="import" title="Add templates from an exported file">Import</button>
+    <input id="file" type="file" accept=".json,application/json" hidden>
+  </div>
 </main>
 
 <template id="tpl">
@@ -208,6 +220,40 @@
   if (!saved.length) make('', true);
 
   document.getElementById('add').addEventListener('click', () => { make('', true); save(); });
+  // Export: download every box as a JSON file. Read-only, changes nothing.
+  document.getElementById('export').addEventListener('click', () => {
+    const templates = [...list.children].map(b => b.querySelector('textarea').value);
+    const blob = new Blob([JSON.stringify({ app: 'paste-been', version: 1, templates }, null, 2)],
+      { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'paste-been-' + new Date().toISOString().slice(0, 10) + '.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  // Import: append templates from a file below the existing boxes. Never replaces.
+  const file = document.getElementById('file');
+  document.getElementById('import').addEventListener('click', () => file.click());
+  file.addEventListener('change', async () => {
+    const f = file.files[0];
+    file.value = '';
+    if (!f) return;
+    let templates;
+    try {
+      const data = JSON.parse(await f.text());
+      templates = Array.isArray(data) ? data : data.templates;
+      if (!Array.isArray(templates) || !templates.every(t => typeof t === 'string')) throw 0;
+    } catch {
+      alert("That file doesn't look like a Paste Been export.");
+      return;
+    }
+    // Drop an untouched empty box so imports don't sit below a blank one
+    [...list.children].forEach(b => { if (!b.querySelector('textarea').value) b.remove(); });
+    templates.filter(t => t.trim()).forEach(t => make(t, false));
+    save();
+  });
+
   window.addEventListener('resize', () => list.querySelectorAll('textarea').forEach(fit));
 })();
 </script>
