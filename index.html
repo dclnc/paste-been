@@ -48,11 +48,53 @@
     transition: border-color .15s;
   }
   .box.editing { border-color: var(--focus); }
+  .box { scroll-margin-top: var(--navh, 12px); }
+  .box.flash { animation: flash 1s ease-out; }
+  @keyframes flash { from { box-shadow: 0 0 0 3px var(--focus); } to { box-shadow: 0 0 0 3px transparent; } }
+  .title {
+    display: block;
+    width: 100%;
+    padding: 12px 16px 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    outline: none;
+    text-overflow: ellipsis;
+  }
+  .title[readonly] { cursor: default; }
+  .title::placeholder { color: var(--muted); font-weight: 400; }
+  #nav {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-height: 30vh;
+    overflow-y: auto;
+    margin: 0 -16px 14px;
+    padding: 10px 16px;
+    background: var(--bg);
+  }
+  #nav[hidden] { display: none; }
+  #nav button {
+    height: 28px;
+    max-width: 220px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--card);
+    color: var(--text);
+  }
+  #nav button:hover { border-color: var(--muted); }
+  #nav button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #nav button.untitled { color: var(--muted); font-style: italic; }
   textarea {
     display: block;
     width: 100%;
     min-height: 3em;
-    padding: 14px 16px 4px;
+    padding: 6px 16px 4px;
     border: 0;
     background: transparent;
     color: inherit;
@@ -126,6 +168,7 @@
 </head>
 <body>
 <main>
+  <nav id="nav" aria-label="Jump to a box" hidden></nav>
   <div id="list"></div>
   <button id="add" aria-label="Add box">+</button>
   <div class="io">
@@ -137,6 +180,7 @@
 
 <template id="tpl">
   <div class="box">
+    <input class="title" type="text" placeholder="Untitled" aria-label="Title">
     <textarea spellcheck="true" placeholder="Type or paste a template…"></textarea>
     <div class="bar">
       <button class="grip" title="Drag to reorder (or focus and use ↑ ↓)" aria-label="Reorder box">
@@ -166,24 +210,66 @@
     check: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 4.5"/></svg>'
   };
 
+  const nav = document.getElementById('nav');
+
+  // A template is { title, text }. Older saves and exports stored plain strings.
+  const norm = t => typeof t === 'string' ? { title: '', text: t }
+    : { title: String(t.title ?? ''), text: String(t.text ?? '') };
+  const valid = t => typeof t === 'string' ||
+    (t && typeof t === 'object' && ['title', 'text'].every(k => t[k] == null || typeof t[k] === 'string'));
+  const read = b => ({ title: b.querySelector('.title').value, text: b.querySelector('textarea').value });
+  const isEmpty = t => !t.title.trim() && !t.text.trim();
+
   const load = () => {
-    try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; }
+    try {
+      const d = JSON.parse(localStorage.getItem(KEY));
+      return Array.isArray(d) ? d.filter(valid).map(norm) : [];
+    } catch { return []; }
   };
+
+  // Jump bar: one chip per box, labelled by its title (or first line if untitled)
+  const jump = box => {
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    box.classList.remove('flash');
+    box.offsetHeight;
+    box.classList.add('flash');
+  };
+  const renderNav = () => {
+    const boxes = [...list.children];
+    nav.hidden = boxes.length < 2;
+    nav.replaceChildren(...boxes.map(box => {
+      const { title, text } = read(box);
+      const b = document.createElement('button');
+      const label = document.createElement('span');
+      const first = text.trim().split('\n')[0].slice(0, 60);
+      label.textContent = title.trim() || first || 'Untitled';
+      b.classList.toggle('untitled', !title.trim());
+      b.title = 'Jump to ' + label.textContent;
+      b.append(label);
+      b.addEventListener('click', () => jump(box));
+      return b;
+    }));
+    list.style.setProperty('--navh', (nav.hidden ? 0 : nav.offsetHeight) + 12 + 'px');
+  };
+
   const save = () => {
-    const data = [...list.children].map(b => b.querySelector('textarea').value);
-    try { localStorage.setItem(KEY, JSON.stringify(data)); } catch {}
+    renderNav();
+    try { localStorage.setItem(KEY, JSON.stringify([...list.children].map(read))); } catch {}
   };
 
   const fit = ta => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
 
   const setEditing = (box, on) => {
     const ta = box.querySelector('textarea');
+    const title = box.querySelector('.title');
     const lock = box.querySelector('.lock');
     box.classList.toggle('editing', on);
-    ta.readOnly = !on;
+    ta.readOnly = title.readOnly = !on;
+    title.tabIndex = on ? 0 : -1;
     lock.innerHTML = (on ? ICON.editing + 'Done' : ICON.locked + 'Edit');
     lock.title = on ? 'Lock this box' : 'Unlock to edit';
-    if (on) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    if (on && !title.value && !ta.value) title.focus();
+    else if (on) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
   };
 
   const copyText = async text => {
@@ -275,19 +361,26 @@
     });
   };
 
-  const make = (text = '', editing = false) => {
+  const make = ({ title = '', text = '' } = {}, editing = false) => {
     const box = tpl.content.firstElementChild.cloneNode(true);
     const ta = box.querySelector('textarea');
+    const titleInput = box.querySelector('.title');
     const copy = box.querySelector('.copy');
     ta.value = text;
+    titleInput.value = title;
     copy.innerHTML = ICON.copy + 'Copy';
 
     ta.addEventListener('input', () => { fit(ta); save(); });
+    titleInput.addEventListener('input', save);
+    // Enter in the title moves on to the text
+    titleInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); ta.focus(); }
+    });
     enableDrag(box);
     box.querySelector('.lock').addEventListener('click', () =>
       setEditing(box, !box.classList.contains('editing')));
     box.querySelector('.del').addEventListener('click', () => {
-      if (ta.value.trim() && !confirm('Delete this box?')) return;
+      if (!isEmpty(read(box)) && !confirm('Delete this box?')) return;
       box.remove(); save();
     });
 
@@ -311,13 +404,14 @@
 
   const saved = load();
   saved.forEach(t => make(t, false));
-  if (!saved.length) make('', true);
+  if (!saved.length) make({}, true);
+  renderNav();
 
-  document.getElementById('add').addEventListener('click', () => { make('', true); save(); });
+  document.getElementById('add').addEventListener('click', () => { make({}, true); save(); });
   // Export: download every box as a JSON file. Read-only, changes nothing.
   document.getElementById('export').addEventListener('click', () => {
-    const templates = [...list.children].map(b => b.querySelector('textarea').value);
-    const blob = new Blob([JSON.stringify({ app: 'paste-been', version: 1, templates }, null, 2)],
+    const templates = [...list.children].map(read);
+    const blob = new Blob([JSON.stringify({ app: 'paste-been', version: 2, templates }, null, 2)],
       { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -337,18 +431,18 @@
     try {
       const data = JSON.parse(await f.text());
       templates = Array.isArray(data) ? data : data.templates;
-      if (!Array.isArray(templates) || !templates.every(t => typeof t === 'string')) throw 0;
+      if (!Array.isArray(templates) || !templates.every(valid)) throw 0;
     } catch {
       alert("That file doesn't look like a Paste Been export.");
       return;
     }
     // Drop an untouched empty box so imports don't sit below a blank one
-    [...list.children].forEach(b => { if (!b.querySelector('textarea').value) b.remove(); });
-    templates.filter(t => t.trim()).forEach(t => make(t, false));
+    [...list.children].forEach(b => { if (isEmpty(read(b))) b.remove(); });
+    templates.map(norm).filter(t => !isEmpty(t)).forEach(t => make(t, false));
     save();
   });
 
-  window.addEventListener('resize', () => list.querySelectorAll('textarea').forEach(fit));
+  window.addEventListener('resize', () => { list.querySelectorAll('textarea').forEach(fit); renderNav(); });
 })();
 </script>
 </body>
