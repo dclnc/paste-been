@@ -70,6 +70,19 @@
     padding: 4px 8px 8px;
   }
   .bar .spacer { flex: 1; }
+  #list { position: relative; }
+  .grip {
+    padding: 0 6px;
+    cursor: grab;
+    touch-action: none;
+  }
+  .box.dragging {
+    position: relative;
+    z-index: 1;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .15);
+  }
+  .box.dragging .grip { cursor: grabbing; }
+  body.drag { user-select: none; -webkit-user-select: none; cursor: grabbing; }
   button {
     display: inline-flex;
     align-items: center;
@@ -126,6 +139,9 @@
   <div class="box">
     <textarea spellcheck="true" placeholder="Type or paste a template…"></textarea>
     <div class="bar">
+      <button class="grip" title="Drag to reorder (or focus and use ↑ ↓)" aria-label="Reorder box">
+        <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="6" cy="4" r="1.2"/><circle cx="10" cy="4" r="1.2"/><circle cx="6" cy="8" r="1.2"/><circle cx="10" cy="8" r="1.2"/><circle cx="6" cy="12" r="1.2"/><circle cx="10" cy="12" r="1.2"/></svg>
+      </button>
       <button class="lock"></button>
       <button class="del" title="Delete box">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg>
@@ -182,6 +198,83 @@
     }
   };
 
+  // Move `box` next to `sib`, sliding `sib` smoothly into its new spot.
+  const moveNext = (box, sib, after) => {
+    const from = sib.offsetTop;
+    after ? sib.after(box) : sib.before(box);
+    sib.style.transition = 'none';
+    sib.style.transform = `translateY(${from - sib.offsetTop}px)`;
+    sib.offsetHeight; // force reflow so the transition runs
+    sib.style.transition = 'transform .15s';
+    sib.style.transform = '';
+  };
+
+  const enableDrag = box => {
+    const grip = box.querySelector('.grip');
+
+    // Keyboard: focus the grip and use the arrow keys
+    grip.addEventListener('keydown', e => {
+      const sib = e.key === 'ArrowUp' ? box.previousElementSibling
+                : e.key === 'ArrowDown' ? box.nextElementSibling : null;
+      if (!sib) return;
+      e.preventDefault();
+      moveNext(box, sib, e.key === 'ArrowDown');
+      grip.focus();
+      save();
+    });
+
+    // Mouse / touch / pen
+    grip.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      // Listen on window: moving the box in the DOM would drop pointer capture
+
+      const startY = e.clientY + scrollY;
+      const startTop = box.offsetTop;
+      let clientY = e.clientY, raf;
+      box.style.transition = 'none';
+      box.classList.add('dragging');
+      document.body.classList.add('drag');
+
+      const update = () => {
+        const y = clientY + scrollY;
+        const listTop = list.getBoundingClientRect().top + scrollY;
+        const mid = el => listTop + el.offsetTop + el.offsetHeight / 2;
+        let sib;
+        while ((sib = box.nextElementSibling) && y > mid(sib)) moveNext(box, sib, true);
+        while ((sib = box.previousElementSibling) && y < mid(sib)) moveNext(box, sib, false);
+        box.style.transform = `translateY(${y - startY - (box.offsetTop - startTop)}px)`;
+      };
+
+      // Scroll the page when dragging near the top or bottom edge
+      const tick = () => {
+        const edge = 60;
+        if (clientY < edge) scrollBy(0, -Math.ceil((edge - clientY) / 4));
+        else if (clientY > innerHeight - edge) scrollBy(0, Math.ceil((clientY - innerHeight + edge) / 4));
+        update();
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+
+      const onMove = ev => { if (ev.pointerId === e.pointerId) { clientY = ev.clientY; update(); } };
+      const onEnd = ev => {
+        if (ev.pointerId !== e.pointerId) return;
+        cancelAnimationFrame(raf);
+        removeEventListener('pointermove', onMove);
+        removeEventListener('pointerup', onEnd);
+        removeEventListener('pointercancel', onEnd);
+        document.body.classList.remove('drag');
+        box.style.transition = 'transform .15s';
+        box.style.transform = '';
+        setTimeout(() => { box.classList.remove('dragging'); box.style.transition = ''; }, 150);
+        save();
+      };
+      addEventListener('pointermove', onMove);
+      addEventListener('pointerup', onEnd);
+      addEventListener('pointercancel', onEnd);
+    });
+  };
+
   const make = (text = '', editing = false) => {
     const box = tpl.content.firstElementChild.cloneNode(true);
     const ta = box.querySelector('textarea');
@@ -190,6 +283,7 @@
     copy.innerHTML = ICON.copy + 'Copy';
 
     ta.addEventListener('input', () => { fit(ta); save(); });
+    enableDrag(box);
     box.querySelector('.lock').addEventListener('click', () =>
       setEditing(box, !box.classList.contains('editing')));
     box.querySelector('.del').addEventListener('click', () => {

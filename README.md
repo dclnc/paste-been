@@ -4,6 +4,7 @@ A minimal page for storing plain-text templates and copying them with one click.
 
 - **+** adds a box
 - **Edit / Done** unlocks or locks a box
+- Drag the **⠿** handle to reorder boxes (or focus it and press ↑ / ↓)
 - **Copy** puts the box's text on the clipboard as plain text
 - **Export** downloads all templates as a file; **Import** adds templates from that file below your existing ones (nothing is replaced)
 
