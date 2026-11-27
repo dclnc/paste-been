@@ -4,7 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Paste Been</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='3' y='2' width='10' height='12' rx='2' fill='%23222'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><rect width='120' height='120' rx='28' fill='%231f8a4c'/><g transform='translate(12 12) scale(.8)' fill='none' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'><path d='M78 32V30A12 12 0 0 0 66 18H30A12 12 0 0 0 18 30V66A12 12 0 0 0 30 78H32' stroke='%23fff'/><rect x='42' y='42' width='64' height='64' rx='14' fill='%23fff'/><path d='M59 75L70 86L90 63' stroke='%231f8a4c'/></g></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap">
 <style>
   :root {
     --bg: #f6f6f4;
@@ -33,12 +36,27 @@
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font: 15px/1.5 "Space Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
   main {
     max-width: 680px;
     margin: 0 auto;
     padding: 40px 16px 80px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .brand svg { width: 32px; height: 32px; flex: none; }
+  .brand .tick { stroke: var(--ok); }
+  .brand h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -.04em;
   }
   .box {
     background: var(--card);
@@ -168,6 +186,14 @@
 </head>
 <body>
 <main>
+  <header class="brand">
+    <svg viewBox="0 0 120 120" fill="none" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M78 32V30A12 12 0 0 0 66 18H30A12 12 0 0 0 18 30V66A12 12 0 0 0 30 78H32" stroke="currentColor"/>
+      <rect x="42" y="42" width="64" height="64" rx="14" fill="currentColor"/>
+      <path class="tick" d="M59 75L70 86L90 63"/>
+    </svg>
+    <h1>paste been</h1>
+  </header>
   <nav id="nav" aria-label="Jump to a box" hidden></nav>
   <div id="list"></div>
   <button id="add" aria-label="Add box">+</button>

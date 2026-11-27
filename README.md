@@ -1,4 +1,4 @@
-# Paste Been
+# <img src="icon.svg" alt="" width="28" align="top"> Paste Been
 
 A minimal page for storing plain-text templates and copying them with one click.
 
